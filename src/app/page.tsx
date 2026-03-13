@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardBody, Button, Input, Label, SectionTitle, Spinner } from '@/components/ui';
+import { ThemeToggle } from '@/components/theme-toggle';
 import { fetchOrgUsers, fetchSleepForDate, type OrgUser, type SleepDay } from '@/lib/sensorbio';
 import { lastNDates, normalizeSleepDay, computeSummary, generateInsights } from '@/lib/report';
 import { fmt1, minsToHm, scoreTextClass } from '@/lib/format';
@@ -179,18 +180,29 @@ export default function Home() {
   const selectedUser = users.find((u) => u.id === selectedUserId);
 
   return (
-    <main className="min-h-screen px-4 py-6 md:py-10">
+    <main className="min-h-screen px-4 py-6 md:py-10 transition-colors duration-200">
       <div className="max-w-6xl mx-auto">
         <header className="flex items-start justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-[22px] font-extrabold text-white leading-tight">Sensor Bio 30-Day Sleep Dashboard</h1>
-            <p className="text-sm text-slate-500 mt-1">Generate a premium 30-day sleep report for any user in your org.</p>
+          <div className="flex items-start gap-3">
+            <img src="/sensorbio-logo.png" alt="Sensor Bio" className="h-10 w-auto mt-0.5" />
+            <div>
+              <h1 className="text-[22px] font-extrabold text-[var(--text-primary)] leading-tight transition-colors duration-200">
+                30-Day Sleep Dashboard
+              </h1>
+              <p className="text-sm text-[var(--muted)] mt-1 transition-colors duration-200">
+                Generate a premium 30-day sleep report for any user in your org.
+              </p>
+            </div>
           </div>
-          {connectedKey ? (
-            <Button variant="danger" onClick={disconnect}>
-              Disconnect
-            </Button>
-          ) : null}
+
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            {connectedKey ? (
+              <Button variant="danger" onClick={disconnect}>
+                Disconnect
+              </Button>
+            ) : null}
+          </div>
         </header>
 
         {!connectedKey ? (
@@ -219,7 +231,8 @@ export default function Home() {
               {status ? <div className="mt-2 text-sm text-slate-400">{status}</div> : null}
 
               <div className="mt-6 text-xs text-slate-500">
-                Tip: your API key never leaves your browser. Requests go directly to <span className="text-slate-300">api.getsensr.io</span>.
+                Tip: your API key never leaves your browser. Requests go directly to{' '}
+                <span className="text-[var(--text-secondary)] transition-colors duration-200">api.getsensr.io</span>.
               </div>
             </CardBody>
           </Card>
@@ -240,29 +253,13 @@ export default function Home() {
                   >
                     Back to Users
                   </Button>
-
-                  <Button
-                    variant="ghost"
-                    onClick={handleDownloadPdf}
-                    disabled={!days || downloadingPdf || loadingReport}
-                    title={!days ? 'Generate a report first' : 'Download as PDF'}
-                  >
-                    {downloadingPdf ? (
-                      'Generating PDF…'
-                    ) : (
-                      <span className="inline-flex items-center gap-2">
-                        <span aria-hidden>⤓</span>
-                        <span>Download PDF</span>
-                      </span>
-                    )}
-                  </Button>
                 </div>
 
                 {error ? <div className="mt-2 text-sm text-red-300">{error}</div> : null}
                 {!loadingReport && status ? <div className="mt-2 text-sm text-slate-400">{status}</div> : null}
 
                 <div ref={reportRef} className="space-y-4">
-                  <ReportBlock userLabel={selectedUser?.name || selectedUser?.email || selectedUserId} days={days} />
+                  <ReportBlock user={selectedUser} days={days} onDownloadPdf={handleDownloadPdf} downloadingPdf={downloadingPdf} />
                 </div>
               </>
             ) : (
@@ -289,14 +286,14 @@ export default function Home() {
                         <button
                           key={u.id}
                           onClick={() => void generateReport(u.id)}
-                          className="text-left bg-[#111827] border border-[#1e293b] rounded-xl p-4 cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-blue-500/40 hover:border-blue-500/60 hover:shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_30px_-15px_rgba(59,130,246,0.35)]"
+                          className="text-left bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 cursor-pointer transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500/40 hover:border-blue-500/60 hover:shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_30px_-15px_rgba(59,130,246,0.35)]"
                         >
                           <div className="flex flex-col items-center">
-                            <div className="h-16 w-16 rounded-full bg-[#0f172a] border border-[#1e293b] overflow-hidden flex items-center justify-center">
+                            <div className="h-16 w-16 rounded-full bg-[var(--background)] border border-[var(--border)] overflow-hidden flex items-center justify-center transition-colors duration-200">
                               <img src={avatar} alt="" className="h-16 w-16" />
                             </div>
                             <div className="mt-3 text-slate-100 font-bold text-center leading-tight">{name}</div>
-                            <div className="mt-1 text-xs text-slate-500 text-center break-all">{email}</div>
+                            <div className="mt-1 text-xs text-[var(--muted)] text-center break-all transition-colors duration-200">{email}</div>
                           </div>
                         </button>
                       );
@@ -322,138 +319,59 @@ export default function Home() {
   );
 }
 
-function ReportBlock({ userLabel, days }: { userLabel: string; days: SleepDay[] }) {
+function ReportBlock({
+  user,
+  days,
+  onDownloadPdf,
+  downloadingPdf,
+}: {
+  user?: OrgUser;
+  days: SleepDay[];
+  onDownloadPdf: () => void;
+  downloadingPdf: boolean;
+}) {
   const summary = computeSummary(days);
 
   const start = days[0]?.date;
   const end = days[days.length - 1]?.date;
 
-  const reportRef = useRef<HTMLDivElement | null>(null);
-
-  async function downloadPdf() {
-    if (!reportRef.current) return;
-
-    // Lazy-load to keep initial bundle lean
-    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
-
-    // Clone and inline computed color styles, html2canvas cannot parse lab(), oklch(), etc.
-    const source = reportRef.current;
-    const clone = source.cloneNode(true) as HTMLElement;
-
-    // Keep sizing stable
-    clone.style.width = `${source.offsetWidth}px`;
-    clone.style.maxWidth = `${source.offsetWidth}px`;
-
-    // Put clone offscreen, but in DOM so computed styles resolve
-    const wrapper = document.createElement('div');
-    wrapper.style.position = 'fixed';
-    wrapper.style.left = '-100000px';
-    wrapper.style.top = '0';
-    wrapper.style.background = '#0a0e1a';
-    wrapper.appendChild(clone);
-    document.body.appendChild(wrapper);
-
-    const colorProps = [
-      'color',
-      'backgroundColor',
-      'borderTopColor',
-      'borderRightColor',
-      'borderBottomColor',
-      'borderLeftColor',
-      'outlineColor',
-      'textDecorationColor',
-      'caretColor',
-      'fill',
-      'stroke',
-    ] as const;
-
-    try {
-      const srcEls = [source, ...Array.from(source.querySelectorAll<HTMLElement>('*'))];
-      const cloneEls = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>('*'))];
-
-      for (let i = 0; i < cloneEls.length; i++) {
-        const s = srcEls[i];
-        const c = cloneEls[i];
-        if (!s || !c) continue;
-
-        const cs = window.getComputedStyle(s);
-        for (const prop of colorProps) {
-          const v = cs[prop as any];
-          if (!v) continue;
-          // Force to rgb()/rgba() using the browser parser
-          c.style.setProperty(prop, parseToRgba(v), 'important');
-        }
-      }
-
-      const canvas = await html2canvas(clone, {
-        useCORS: true,
-        backgroundColor: '#0a0e1a',
-        scale: 2,
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'p',
-        unit: 'pt',
-        format: 'a4',
-      });
-
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 28;
-
-      const availW = pageW - margin * 2;
-      const imgW = availW;
-      const imgH = (canvas.height * imgW) / canvas.width;
-
-      let y = margin;
-      let remaining = imgH;
-
-      // If content fits on one page
-      if (imgH <= pageH - margin * 2) {
-        pdf.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
-      } else {
-        // Multi-page: slice by drawing the same image with negative y offset
-        let offsetY = 0;
-        while (remaining > 0) {
-          pdf.addImage(imgData, 'PNG', margin, y - offsetY, imgW, imgH);
-          remaining -= pageH - margin * 2;
-          offsetY += pageH - margin * 2;
-          if (remaining > 0) pdf.addPage();
-        }
-      }
-
-      const safeName = userLabel.replace(/[^a-z0-9-_]+/gi, '_');
-      pdf.save(`SensorBio_SleepReport_${safeName}_${start || ''}_${end || ''}.pdf`);
-    } finally {
-      wrapper.remove();
-    }
-  }
-
-  function parseToRgba(input: string) {
-    // Use browser parsing, avoids manual lab/oklch conversion
-    const probe = document.createElement('span');
-    probe.style.color = input;
-    document.body.appendChild(probe);
-    const out = getComputedStyle(probe).color;
-    probe.remove();
-    return out;
-  }
+  const name = (user?.name || user?.email || user?.id || 'User').toString();
+  const email = user?.email?.toString() || '';
+  const avatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
 
   return (
     <>
-      <div className="mb-2 flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-white text-lg font-bold">{userLabel} — 30-Day Sleep Report</h2>
-          <p className="text-[13px] text-slate-500">
-            {formatRange(start, end)} · Sensor Bio · {summary.recordedCount} of {summary.totalDays} days recorded
-          </p>
-        </div>
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 md:p-5 transition-colors duration-200">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="h-14 w-14 rounded-full overflow-hidden border border-[var(--border)] bg-[var(--background)] flex items-center justify-center transition-colors duration-200">
+              <img src={avatar} alt="" className="h-14 w-14" />
+            </div>
 
-        <Button variant="ghost" onClick={downloadPdf}>Download PDF</Button>
+            <div>
+              <div className="text-[22px] font-extrabold leading-tight text-[var(--text-primary)] transition-colors duration-200">{name}</div>
+              {email ? (
+                <div className="mt-1 text-[13px] text-[var(--muted)] transition-colors duration-200">{email}</div>
+              ) : null}
+              <div className="mt-2 text-[13px] text-[var(--muted)] transition-colors duration-200">
+                30-Day Sleep Report · {formatRange(start, end)} · {summary.recordedCount} of {summary.totalDays} days recorded
+              </div>
+            </div>
+          </div>
+
+          <Button
+            variant="ghost"
+            onClick={onDownloadPdf}
+            disabled={downloadingPdf}
+            title="Download as PDF"
+            className="shrink-0"
+          >
+            {downloadingPdf ? 'Generating PDF…' : 'Download PDF'}
+          </Button>
+        </div>
       </div>
 
-      <div ref={reportRef}>
+      <div className="mt-4">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         <SummaryCard label="Avg Sleep Score" value={summary.avgScore ? Math.round(summary.avgScore).toString() : '—'} accent="amber" sub={`${summary.recordedCount} nights recorded`} />
         <SummaryCard label="Avg Total Sleep" value={minsToHm(summary.avgTotal ?? undefined)} accent="blue" sub="Goal: 7h+" />
@@ -474,7 +392,7 @@ function ReportBlock({ userLabel, days }: { userLabel: string; days: SleepDay[] 
           value={
             <span className="text-base font-extrabold">
               <span className="text-green-500">{summary.best?.score ? Math.round(summary.best.score) : '—'}</span>
-              <span className="text-slate-500"> / </span>
+              <span className="text-[var(--muted)] transition-colors duration-200"> / </span>
               <span className="text-red-500">{summary.worst?.score ? Math.round(summary.worst.score) : '—'}</span>
             </span>
           }
@@ -517,16 +435,16 @@ function ReportBlock({ userLabel, days }: { userLabel: string; days: SleepDay[] 
           <div className="overflow-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="text-[10px] text-slate-500 uppercase tracking-wider">
-                  <th className="text-left py-2 px-2 border-b border-[#1e293b]">Date</th>
-                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Score</th>
-                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Total</th>
-                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Deep</th>
-                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">REM</th>
-                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Awake</th>
-                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Latency</th>
-                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">HRV</th>
-                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Resting HR</th>
+                <tr className="text-[10px] text-[var(--muted)] uppercase tracking-wider transition-colors duration-200">
+                  <th className="text-left py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Date</th>
+                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Score</th>
+                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Total</th>
+                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Deep</th>
+                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">REM</th>
+                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Awake</th>
+                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Latency</th>
+                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">HRV</th>
+                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Resting HR</th>
                 </tr>
               </thead>
               <tbody>

@@ -3,6 +3,24 @@
 :root {
   --background: #0a0e1a;
   --foreground: #e2e8f0;
+  --card: #111827;
+  --border: #1e293b;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --muted: #64748b;
+  --grid: #1e293b;
+}
+
+/* Light theme overrides (default is dark) */
+html.light {
+  --background: #f8fafc;
+  --foreground: #1e293b;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+  --muted: #64748b;
+  --grid: #e2e8f0;
 }
 
 html,
@@ -18,5 +36,5 @@ body {
 
 /* subtle scrollbars */
 * {
-  scrollbar-color: #1e293b #0a0e1a;
+  scrollbar-color: var(--border) var(--background);
 }

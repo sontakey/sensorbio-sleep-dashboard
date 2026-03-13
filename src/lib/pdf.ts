@@ -55,6 +55,27 @@ export async function downloadDashboardPdf({
   let remainingHeight = imgHeight;
   let sourceY = 0;
 
+  // Load logo (best-effort). If it fails, continue without it.
+  async function loadLogoDataUrl() {
+    try {
+      const res = await fetch('/sensorbio-logo.png');
+      const blob = await res.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Failed to read logo')); 
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  const themeBg = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
+  const isLight = themeBg.toLowerCase() === '#f8fafc' || document.documentElement.classList.contains('light');
+
+  const logo = await loadLogoDataUrl();
+
   while (remainingHeight > 0) {
     // How much vertical space we can fit on this page
     const space = pageHeight - margin * 2;
@@ -73,9 +94,24 @@ export async function downloadDashboardPdf({
     const sliceData = slice.toDataURL('image/png', 1.0);
     const sliceHeightPt = (sliceHeightPx * imgWidth) / canvas.width;
 
-    // Fill background to preserve dark theme even if page has transparency
-    pdf.setFillColor(15, 23, 42);
+    // Fill background to preserve theme even if page has transparency
+    if (isLight) {
+      pdf.setFillColor(248, 250, 252);
+    } else {
+      pdf.setFillColor(15, 23, 42);
+    }
     pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+
+    // Header brand
+    if (logo) {
+      const logoH = 24;
+      const logoW = 24 * 3.2;
+      try {
+        pdf.addImage(logo, 'PNG', margin, 16, logoW, logoH, undefined, 'FAST');
+      } catch {
+        // ignore
+      }
+    }
 
     pdf.addImage(sliceData, 'PNG', margin, y, imgWidth, sliceHeightPt, undefined, 'FAST');
 
