@@ -34,22 +34,34 @@ export function HeatmapCalendar({ days }: { days: SleepDay[] }) {
 
       <div className="grid grid-cols-7 gap-1">
         {blanks.map((i) => (
-          <div key={`b-${i}`} className="min-h-[44px] rounded-md" />
+          <div key={`b-${i}`} className="min-h-[54px] rounded-md" />
         ))}
 
         {days.map((d) => (
           <div
             key={d.date}
-            className="rounded-md min-h-[44px] flex flex-col items-center justify-center gap-0.5"
+            className="rounded-md min-h-[54px] flex flex-col items-center justify-center gap-1"
             style={{ background: bg(d.score, d.hasData) }}
             title={d.hasData ? `${d.date}: ${d.score ?? '—'}` : `${d.date}: No data`}
           >
             {d.hasData && typeof d.score === 'number' && d.score > 0 ? (
               <>
-                <div className="text-[10px] font-extrabold" style={{ color: fg(d.score) }}>
+                <div className="text-[18px] leading-none font-extrabold" style={{ color: fg(d.score) }}>
                   {Math.round(d.score)}
                 </div>
-                <div className="text-[8px]" style={{ color: d.score >= 90 ? '#4ade80' : d.score >= 75 ? '#60a5fa' : d.score >= 50 ? '#f59e0b' : '#ef4444' }}>
+                <div
+                  className="text-[9px] leading-none font-semibold"
+                  style={{
+                    color:
+                      d.score >= 90
+                        ? '#4ade80'
+                        : d.score >= 75
+                          ? '#60a5fa'
+                          : d.score >= 50
+                            ? '#f59e0b'
+                            : '#ef4444',
+                  }}
+                >
                   {d.date.slice(8)}
                 </div>
               </>

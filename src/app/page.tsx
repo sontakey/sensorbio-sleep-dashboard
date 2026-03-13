@@ -328,16 +328,133 @@ function ReportBlock({ userLabel, days }: { userLabel: string; days: SleepDay[] 
   const start = days[0]?.date;
   const end = days[days.length - 1]?.date;
 
+  const reportRef = useRef<HTMLDivElement | null>(null);
+
+  async function downloadPdf() {
+    if (!reportRef.current) return;
+
+    // Lazy-load to keep initial bundle lean
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')]);
+
+    // Clone and inline computed color styles, html2canvas cannot parse lab(), oklch(), etc.
+    const source = reportRef.current;
+    const clone = source.cloneNode(true) as HTMLElement;
+
+    // Keep sizing stable
+    clone.style.width = `${source.offsetWidth}px`;
+    clone.style.maxWidth = `${source.offsetWidth}px`;
+
+    // Put clone offscreen, but in DOM so computed styles resolve
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'fixed';
+    wrapper.style.left = '-100000px';
+    wrapper.style.top = '0';
+    wrapper.style.background = '#0a0e1a';
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+
+    const colorProps = [
+      'color',
+      'backgroundColor',
+      'borderTopColor',
+      'borderRightColor',
+      'borderBottomColor',
+      'borderLeftColor',
+      'outlineColor',
+      'textDecorationColor',
+      'caretColor',
+      'fill',
+      'stroke',
+    ] as const;
+
+    try {
+      const srcEls = [source, ...Array.from(source.querySelectorAll<HTMLElement>('*'))];
+      const cloneEls = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>('*'))];
+
+      for (let i = 0; i < cloneEls.length; i++) {
+        const s = srcEls[i];
+        const c = cloneEls[i];
+        if (!s || !c) continue;
+
+        const cs = window.getComputedStyle(s);
+        for (const prop of colorProps) {
+          const v = cs[prop as any];
+          if (!v) continue;
+          // Force to rgb()/rgba() using the browser parser
+          c.style.setProperty(prop, parseToRgba(v), 'important');
+        }
+      }
+
+      const canvas = await html2canvas(clone, {
+        useCORS: true,
+        backgroundColor: '#0a0e1a',
+        scale: 2,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'pt',
+        format: 'a4',
+      });
+
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 28;
+
+      const availW = pageW - margin * 2;
+      const imgW = availW;
+      const imgH = (canvas.height * imgW) / canvas.width;
+
+      let y = margin;
+      let remaining = imgH;
+
+      // If content fits on one page
+      if (imgH <= pageH - margin * 2) {
+        pdf.addImage(imgData, 'PNG', margin, margin, imgW, imgH);
+      } else {
+        // Multi-page: slice by drawing the same image with negative y offset
+        let offsetY = 0;
+        while (remaining > 0) {
+          pdf.addImage(imgData, 'PNG', margin, y - offsetY, imgW, imgH);
+          remaining -= pageH - margin * 2;
+          offsetY += pageH - margin * 2;
+          if (remaining > 0) pdf.addPage();
+        }
+      }
+
+      const safeName = userLabel.replace(/[^a-z0-9-_]+/gi, '_');
+      pdf.save(`SensorBio_SleepReport_${safeName}_${start || ''}_${end || ''}.pdf`);
+    } finally {
+      wrapper.remove();
+    }
+  }
+
+  function parseToRgba(input: string) {
+    // Use browser parsing, avoids manual lab/oklch conversion
+    const probe = document.createElement('span');
+    probe.style.color = input;
+    document.body.appendChild(probe);
+    const out = getComputedStyle(probe).color;
+    probe.remove();
+    return out;
+  }
+
   return (
     <>
-      <div className="mb-2">
-        <h2 className="text-white text-lg font-bold">{userLabel} — 30-Day Sleep Report</h2>
-        <p className="text-[13px] text-slate-500">
-          {formatRange(start, end)} · Sensor Bio · {summary.recordedCount} of {summary.totalDays} days recorded
-        </p>
+      <div className="mb-2 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-white text-lg font-bold">{userLabel} — 30-Day Sleep Report</h2>
+          <p className="text-[13px] text-slate-500">
+            {formatRange(start, end)} · Sensor Bio · {summary.recordedCount} of {summary.totalDays} days recorded
+          </p>
+        </div>
+
+        <Button variant="ghost" onClick={downloadPdf}>Download PDF</Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <div ref={reportRef}>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         <SummaryCard label="Avg Sleep Score" value={summary.avgScore ? Math.round(summary.avgScore).toString() : '—'} accent="amber" sub={`${summary.recordedCount} nights recorded`} />
         <SummaryCard label="Avg Total Sleep" value={minsToHm(summary.avgTotal ?? undefined)} accent="blue" sub="Goal: 7h+" />
         <SummaryCard
@@ -448,6 +565,7 @@ function ReportBlock({ userLabel, days }: { userLabel: string; days: SleepDay[] 
       <div className="mt-4">
         <SectionTitle>Key Insights</SectionTitle>
         <Insights days={days} />
+      </div>
       </div>
     </>
   );
