@@ -164,7 +164,6 @@ export default function Home() {
     setError('');
 
     try {
-      // Let the UI settle (fonts, charts) before snapshot
       await new Promise((r) => setTimeout(r, 150));
       await downloadDashboardPdf({
         element: reportRef.current,
@@ -232,7 +231,7 @@ export default function Home() {
 
               <div className="mt-6 text-xs text-slate-500">
                 Tip: your API key never leaves your browser. Requests go directly to{' '}
-                <span className="text-[var(--text-secondary)] transition-colors duration-200">api.getsensr.io</span>.
+                <span className="text-slate-300">api.getsensr.io</span>.
               </div>
             </CardBody>
           </Card>
@@ -240,26 +239,51 @@ export default function Home() {
           <div className="space-y-4">
             {selectedUserId && days ? (
               <>
-                <div className="flex items-center justify-between gap-3">
-                  <Button
-                    variant="ghost"
-                    onClick={() => {
-                      abortRef.current?.abort();
-                      setSelectedUserId('');
-                      setDays(null);
-                      setStatus('');
-                      setError('');
-                    }}
-                  >
-                    Back to Users
-                  </Button>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="h-16 w-16 rounded-full border border-[var(--border)] overflow-hidden bg-[var(--card)]">
+                      <img
+                        src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                          selectedUser?.name || selectedUser?.email || selectedUserId,
+                        )}`}
+                        alt=""
+                        className="h-16 w-16"
+                      />
+                    </div>
+                    <div>
+                      <div className="text-xl font-extrabold text-[var(--text-primary)] transition-colors duration-200">
+                        {(selectedUser?.name || selectedUser?.email || selectedUserId).toString()}
+                      </div>
+                      <div className="text-sm text-[var(--muted)] transition-colors duration-200">
+                        {selectedUser?.email || ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        abortRef.current?.abort();
+                        setSelectedUserId('');
+                        setDays(null);
+                        setStatus('');
+                        setError('');
+                      }}
+                    >
+                      Back to Users
+                    </Button>
+                    <Button variant="primary" onClick={handleDownloadPdf} disabled={downloadingPdf}>
+                      {downloadingPdf ? 'Downloading…' : 'Download PDF'}
+                    </Button>
+                  </div>
                 </div>
 
                 {error ? <div className="mt-2 text-sm text-red-300">{error}</div> : null}
                 {!loadingReport && status ? <div className="mt-2 text-sm text-slate-400">{status}</div> : null}
 
                 <div ref={reportRef} className="space-y-4">
-                  <ReportBlock user={selectedUser} days={days} onDownloadPdf={handleDownloadPdf} downloadingPdf={downloadingPdf} />
+                  <ReportBlock user={selectedUser} days={days} />
                 </div>
               </>
             ) : (
@@ -292,8 +316,12 @@ export default function Home() {
                             <div className="h-16 w-16 rounded-full bg-[var(--background)] border border-[var(--border)] overflow-hidden flex items-center justify-center transition-colors duration-200">
                               <img src={avatar} alt="" className="h-16 w-16" />
                             </div>
-                            <div className="mt-3 text-slate-100 font-bold text-center leading-tight">{name}</div>
-                            <div className="mt-1 text-xs text-[var(--muted)] text-center break-all transition-colors duration-200">{email}</div>
+                            <div className="mt-3 text-[var(--text-primary)] font-bold text-center leading-tight transition-colors duration-200">
+                              {name}
+                            </div>
+                            <div className="mt-1 text-xs text-[var(--muted)] text-center break-all transition-colors duration-200">
+                              {email}
+                            </div>
                           </div>
                         </button>
                       );
@@ -311,7 +339,7 @@ export default function Home() {
           </div>
         )}
 
-        <footer className="mt-10 text-xs text-slate-600">
+        <footer className="mt-10 text-xs text-[var(--muted)] transition-colors duration-200">
           Powered by Sensor Bio | Data stays in your browser
         </footer>
       </div>
@@ -322,58 +350,31 @@ export default function Home() {
 function ReportBlock({
   user,
   days,
-  onDownloadPdf,
-  downloadingPdf,
 }: {
   user?: OrgUser;
   days: SleepDay[];
-  onDownloadPdf: () => void;
-  downloadingPdf: boolean;
 }) {
   const summary = computeSummary(days);
 
   const start = days[0]?.date;
   const end = days[days.length - 1]?.date;
 
-  const name = (user?.name || user?.email || user?.id || 'User').toString();
-  const email = user?.email?.toString() || '';
-  const avatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
-
   return (
     <>
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 md:p-5 transition-colors duration-200">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            <div className="h-14 w-14 rounded-full overflow-hidden border border-[var(--border)] bg-[var(--background)] flex items-center justify-center transition-colors duration-200">
-              <img src={avatar} alt="" className="h-14 w-14" />
-            </div>
-
-            <div>
-              <div className="text-[22px] font-extrabold leading-tight text-[var(--text-primary)] transition-colors duration-200">{name}</div>
-              {email ? (
-                <div className="mt-1 text-[13px] text-[var(--muted)] transition-colors duration-200">{email}</div>
-              ) : null}
-              <div className="mt-2 text-[13px] text-[var(--muted)] transition-colors duration-200">
-                30-Day Sleep Report · {formatRange(start, end)} · {summary.recordedCount} of {summary.totalDays} days recorded
-              </div>
-            </div>
-          </div>
-
-          <Button
-            variant="ghost"
-            onClick={onDownloadPdf}
-            disabled={downloadingPdf}
-            title="Download as PDF"
-            className="shrink-0"
-          >
-            {downloadingPdf ? 'Generating PDF…' : 'Download PDF'}
-          </Button>
-        </div>
+      <div className="mb-2">
+        <h2 className="text-[var(--text-primary)] text-lg font-bold transition-colors duration-200">30-Day Sleep Report</h2>
+        <p className="text-[13px] text-[var(--muted)] transition-colors duration-200">
+          {formatRange(start, end)} · Sensor Bio · {summary.recordedCount} of {summary.totalDays} days recorded
+        </p>
       </div>
 
-      <div className="mt-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-        <SummaryCard label="Avg Sleep Score" value={summary.avgScore ? Math.round(summary.avgScore).toString() : '—'} accent="amber" sub={`${summary.recordedCount} nights recorded`} />
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+        <SummaryCard
+          label="Avg Sleep Score"
+          value={summary.avgScore ? Math.round(summary.avgScore).toString() : '—'}
+          accent="amber"
+          sub={`${summary.recordedCount} nights recorded`}
+        />
         <SummaryCard label="Avg Total Sleep" value={minsToHm(summary.avgTotal ?? undefined)} accent="blue" sub="Goal: 7h+" />
         <SummaryCard
           label="Avg Deep + REM"
@@ -392,7 +393,7 @@ function ReportBlock({
           value={
             <span className="text-base font-extrabold">
               <span className="text-green-500">{summary.best?.score ? Math.round(summary.best.score) : '—'}</span>
-              <span className="text-[var(--muted)] transition-colors duration-200"> / </span>
+              <span className="text-slate-500"> / </span>
               <span className="text-red-500">{summary.worst?.score ? Math.round(summary.worst.score) : '—'}</span>
             </span>
           }
@@ -435,16 +436,16 @@ function ReportBlock({
           <div className="overflow-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
-                <tr className="text-[10px] text-[var(--muted)] uppercase tracking-wider transition-colors duration-200">
-                  <th className="text-left py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Date</th>
-                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Score</th>
-                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Total</th>
-                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Deep</th>
-                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">REM</th>
-                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Awake</th>
-                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Latency</th>
-                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">HRV</th>
-                  <th className="text-center py-2 px-2 border-b border-[var(--border)] transition-colors duration-200">Resting HR</th>
+                <tr className="text-[10px] text-slate-500 uppercase tracking-wider">
+                  <th className="text-left py-2 px-2 border-b border-[#1e293b]">Date</th>
+                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Score</th>
+                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Total</th>
+                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Deep</th>
+                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">REM</th>
+                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Awake</th>
+                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Latency</th>
+                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">HRV</th>
+                  <th className="text-center py-2 px-2 border-b border-[#1e293b]">Resting HR</th>
                 </tr>
               </thead>
               <tbody>
@@ -483,7 +484,6 @@ function ReportBlock({
       <div className="mt-4">
         <SectionTitle>Key Insights</SectionTitle>
         <Insights days={days} />
-      </div>
       </div>
     </>
   );
@@ -562,5 +562,5 @@ function formatRange(start?: string, end?: string) {
   const e = `${end}`;
   const s2 = `${s.slice(5, 7)}/${s.slice(8, 10)}/${s.slice(0, 4)}`;
   const e2 = `${e.slice(5, 7)}/${e.slice(8, 10)}/${e.slice(0, 4)}`;
-  return `${s2} – ${e2}`;
+  return `${s2} - ${e2}`;
 }

@@ -15,21 +15,23 @@ function yyyyMmDd(d = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
-function toRgb(input: string) {
-  // Canvas parser returns a normalized rgb()/rgba()/hex string even if input was lab()/oklch().
+function maybeUnsupportedColor(value: string) {
+  const v = value.toLowerCase();
+  return v.includes('lab(') || v.includes('oklab(') || v.includes('oklch(');
+}
+
+function toRgb(input: string): string {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) return input;
-  try {
-    ctx.fillStyle = '#000';
-    ctx.fillStyle = input;
-    return String(ctx.fillStyle);
-  } catch {
-    return input;
-  }
+  ctx.fillStyle = '#000';
+  ctx.fillStyle = input;
+  return ctx.fillStyle;
 }
 
-function inlineSafeColors(root: HTMLElement) {
+function normalizeElementColors(el: Element) {
+  const style = window.getComputedStyle(el);
+
   const props = [
     'color',
     'background-color',
@@ -40,30 +42,27 @@ function inlineSafeColors(root: HTMLElement) {
     'border-left-color',
     'outline-color',
     'text-decoration-color',
-    'caret-color',
     'fill',
     'stroke',
-    'box-shadow',
-  ];
+  ] as const;
 
-  const all: HTMLElement[] = [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))];
-  for (const el of all) {
-    const cs = window.getComputedStyle(el);
-
-    for (const prop of props) {
-      const val = cs.getPropertyValue(prop);
-      if (!val) continue;
-      if (val.includes('lab(') || val.includes('oklch(') || val.includes('oklab(')) {
-        el.style.setProperty(prop, toRgb(val));
-      }
-    }
-
-    const bg = cs.getPropertyValue('background');
-    if (bg && (bg.includes('lab(') || bg.includes('oklch(') || bg.includes('oklab('))) {
-      const bgc = cs.getPropertyValue('background-color');
-      if (bgc) el.style.setProperty('background-color', toRgb(bgc));
+  for (const prop of props) {
+    const value = style.getPropertyValue(prop);
+    if (value && maybeUnsupportedColor(value)) {
+      (el as HTMLElement).style.setProperty(prop, toRgb(value));
     }
   }
+
+  const bg = style.getPropertyValue('background');
+  if (bg && maybeUnsupportedColor(bg)) {
+    (el as HTMLElement).style.setProperty('background', toRgb(bg));
+  }
+}
+
+function normalizeTreeColors(root: Element) {
+  normalizeElementColors(root);
+  const all = root.querySelectorAll('*');
+  for (const el of all) normalizeElementColors(el);
 }
 
 export async function downloadDashboardPdf({
@@ -73,43 +72,21 @@ export async function downloadDashboardPdf({
   element: HTMLElement;
   userLabel: string;
 }) {
-  // Clone and inline computed colors as rgb(), html2canvas cannot parse lab()/oklch().
-  const source = element;
-  const clone = source.cloneNode(true) as HTMLElement;
-
-  clone.style.width = `${source.offsetWidth}px`;
-  clone.style.maxWidth = `${source.offsetWidth}px`;
+  const clone = element.cloneNode(true) as HTMLElement;
 
   const wrapper = document.createElement('div');
   wrapper.style.position = 'fixed';
-  wrapper.style.left = '-100000px';
+  wrapper.style.left = '-10000px';
   wrapper.style.top = '0';
-  wrapper.style.background =
-    getComputedStyle(document.documentElement).getPropertyValue('--background').trim() || '#0a0e1a';
+  wrapper.style.width = `${element.getBoundingClientRect().width}px`;
+  wrapper.style.pointerEvents = 'none';
+  wrapper.style.opacity = '0';
   wrapper.appendChild(clone);
+
   document.body.appendChild(wrapper);
 
-  // Load logo (best-effort). If it fails, continue without it.
-  async function loadLogoDataUrl() {
-    try {
-      const res = await fetch('/sensorbio-logo.png');
-      const blob = await res.blob();
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error('Failed to read logo'));
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      return null;
-    }
-  }
-
-  const themeBg = getComputedStyle(document.documentElement).getPropertyValue('--background').trim();
-  const isLight = themeBg.toLowerCase() === '#f8fafc' || document.documentElement.classList.contains('light');
-
   try {
-    inlineSafeColors(clone);
+    normalizeTreeColors(clone);
 
     const canvas = await html2canvas(clone, {
       backgroundColor: null,
@@ -122,9 +99,6 @@ export async function downloadDashboardPdf({
       windowHeight: clone.scrollHeight,
     });
 
-    const imgData = canvas.toDataURL('image/png', 1.0);
-
-    // Letter portrait
     const pdf = new jsPDF({
       orientation: 'p',
       unit: 'pt',
@@ -138,20 +112,12 @@ export async function downloadDashboardPdf({
     const margin = 28;
     const usableWidth = pageWidth - margin * 2;
     const imgWidth = usableWidth;
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    const spaceHeight = pageHeight - margin * 2;
 
-    let y = margin;
-    let remainingHeight = imgHeight;
     let sourceY = 0;
+    while (sourceY < canvas.height) {
+      const sliceHeightPx = Math.min(canvas.height - sourceY, (spaceHeight * canvas.width) / imgWidth);
 
-    const logo = await loadLogoDataUrl();
-
-    while (remainingHeight > 0) {
-      // How much vertical space we can fit on this page
-      const space = pageHeight - margin * 2;
-      const sliceHeightPx = Math.min(canvas.height - sourceY, (space * canvas.width) / imgWidth);
-
-      // Create a page slice canvas
       const slice = document.createElement('canvas');
       slice.width = canvas.width;
       slice.height = sliceHeightPx;
@@ -164,34 +130,13 @@ export async function downloadDashboardPdf({
       const sliceData = slice.toDataURL('image/png', 1.0);
       const sliceHeightPt = (sliceHeightPx * imgWidth) / canvas.width;
 
-      // Fill background to preserve theme even if page has transparency
-      if (isLight) {
-        pdf.setFillColor(248, 250, 252);
-      } else {
-        pdf.setFillColor(15, 23, 42);
-      }
+      pdf.setFillColor(15, 23, 42);
       pdf.rect(0, 0, pageWidth, pageHeight, 'F');
 
-      // Header brand
-      if (logo) {
-        const logoH = 24;
-        const logoW = 24 * 3.2;
-        try {
-          pdf.addImage(logo, 'PNG', margin, 16, logoW, logoH, undefined, 'FAST');
-        } catch {
-          // ignore
-        }
-      }
+      pdf.addImage(sliceData, 'PNG', margin, margin, imgWidth, sliceHeightPt, undefined, 'FAST');
 
-      pdf.addImage(sliceData, 'PNG', margin, y, imgWidth, sliceHeightPt, undefined, 'FAST');
-
-      remainingHeight -= sliceHeightPt;
       sourceY += sliceHeightPx;
-
-      if (sourceY < canvas.height) {
-        pdf.addPage();
-        y = margin;
-      }
+      if (sourceY < canvas.height) pdf.addPage();
     }
 
     const filename = `${safeFilePart(userLabel)}_30-Day_Sleep_Report_${yyyyMmDd()}.pdf`;

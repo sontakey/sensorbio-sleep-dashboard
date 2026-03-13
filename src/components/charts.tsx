@@ -17,9 +17,19 @@ import { scoreColor } from '@/lib/format';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Filler);
 
+function cssVar(name: string, fallback: string) {
+  if (typeof window === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
 export function TrendChart({ days }: { days: SleepDay[] }) {
   const valid = days.filter((d) => d.hasData && (d.totalMins ?? 0) > 10);
   const labels = valid.map((d) => d.date.slice(5));
+
+  const grid = cssVar('--grid', '#1e293b');
+  const ticks = cssVar('--muted', '#64748b');
+  const legend = cssVar('--text-secondary', '#94a3b8');
 
   const data = {
     labels,
@@ -51,20 +61,15 @@ export function TrendChart({ days }: { days: SleepDay[] }) {
     responsive: true,
     interaction: { mode: 'index' as const, intersect: false },
     plugins: {
-      legend: {
-        labels: {
-          // Let CSS theme control text color
-          color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#94a3b8',
-        },
-      },
+      legend: { labels: { color: legend } },
       tooltip: { enabled: true },
     },
     scales: {
       y: {
         beginAtZero: true,
         max: 100,
-        grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--grid').trim() || '#1e293b' },
-        ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#64748b' },
+        grid: { color: grid },
+        ticks: { color: ticks },
       },
       y1: {
         position: 'right' as const,
@@ -76,11 +81,7 @@ export function TrendChart({ days }: { days: SleepDay[] }) {
         },
       },
       x: {
-        ticks: {
-          color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#64748b',
-          maxRotation: 0,
-          autoSkip: true,
-        },
+        ticks: { color: ticks, maxRotation: 0, autoSkip: true },
         grid: { display: false },
       },
     },
@@ -92,6 +93,10 @@ export function TrendChart({ days }: { days: SleepDay[] }) {
 export function StagesChart({ days }: { days: SleepDay[] }) {
   const valid = days.filter((d) => d.hasData && (d.totalMins ?? 0) > 10);
   const labels = valid.map((d) => d.date.slice(5));
+
+  const grid = cssVar('--grid', '#1e293b');
+  const ticks = cssVar('--muted', '#64748b');
+  const legend = cssVar('--text-secondary', '#94a3b8');
 
   const data = {
     labels,
@@ -106,30 +111,15 @@ export function StagesChart({ days }: { days: SleepDay[] }) {
   const options = {
     responsive: true,
     plugins: {
-      legend: {
-        labels: {
-          color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#94a3b8',
-        },
-      },
+      legend: { labels: { color: legend } },
       tooltip: { enabled: true },
     },
     scales: {
-      x: {
-        stacked: true,
-        ticks: {
-          color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#64748b',
-          maxRotation: 0,
-          autoSkip: true,
-        },
-        grid: { display: false },
-      },
+      x: { stacked: true, ticks: { color: ticks, maxRotation: 0, autoSkip: true }, grid: { display: false } },
       y: {
         stacked: true,
-        grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--grid').trim() || '#1e293b' },
-        ticks: {
-          color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#64748b',
-          callback: (v: any) => `${v}m`,
-        },
+        grid: { color: grid },
+        ticks: { color: ticks, callback: (v: any) => `${v}m` },
       },
     },
   };
@@ -140,6 +130,10 @@ export function StagesChart({ days }: { days: SleepDay[] }) {
 export function BiometricsChart({ days }: { days: SleepDay[] }) {
   const valid = days.filter((d) => d.hasData && typeof d.restingHr === 'number' && typeof d.hrv === 'number');
   const labels = valid.map((d) => d.date.slice(5));
+
+  const grid = cssVar('--grid', '#1e293b');
+  const ticks = cssVar('--muted', '#64748b');
+  const legend = cssVar('--text-secondary', '#94a3b8');
 
   const data = {
     labels,
@@ -169,26 +163,12 @@ export function BiometricsChart({ days }: { days: SleepDay[] }) {
     responsive: true,
     interaction: { mode: 'index' as const, intersect: false },
     plugins: {
-      legend: {
-        labels: {
-          color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#94a3b8',
-        },
-      },
+      legend: { labels: { color: legend } },
       tooltip: { enabled: true },
     },
     scales: {
-      x: {
-        ticks: {
-          color: getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#64748b',
-          maxRotation: 0,
-          autoSkip: true,
-        },
-        grid: { display: false },
-      },
-      y: {
-        grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--grid').trim() || '#1e293b' },
-        ticks: { color: '#ef4444', callback: (v: any) => `${v} bpm` },
-      },
+      x: { ticks: { color: ticks, maxRotation: 0, autoSkip: true }, grid: { display: false } },
+      y: { grid: { color: grid }, ticks: { color: '#ef4444', callback: (v: any) => `${v} bpm` } },
       y1: {
         position: 'right' as const,
         grid: { display: false },
