@@ -7,6 +7,7 @@ import { lastNDates, normalizeSleepDay, computeSummary, generateInsights } from 
 import { fmt1, minsToHm, scoreTextClass } from '@/lib/format';
 import { HeatmapCalendar } from '@/components/heatmap';
 import { TrendChart, StagesChart, BiometricsChart } from '@/components/charts';
+import { downloadDashboardPdf } from '@/lib/pdf';
 
 const KEY_STORAGE = 'sensorbio_org_api_key';
 
@@ -24,8 +25,10 @@ export default function Home() {
 
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
+  const reportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem(KEY_STORAGE);
@@ -125,7 +128,7 @@ export default function Home() {
     abortRef.current = new AbortController();
 
     try {
-      const { dates, start, end } = lastNDates(30);
+      const { dates } = lastNDates(30);
       setStatus(`Fetching day 1 of 30...`);
 
       const out: SleepDay[] = [];
@@ -144,6 +147,27 @@ export default function Home() {
       setStatus('');
     } finally {
       setLoadingReport(false);
+    }
+  }
+
+  async function handleDownloadPdf() {
+    if (!days) return;
+    if (!reportRef.current) return;
+
+    setDownloadingPdf(true);
+    setError('');
+
+    try {
+      // Let the UI settle (fonts, charts) before snapshot
+      await new Promise((r) => setTimeout(r, 150));
+      await downloadDashboardPdf({
+        element: reportRef.current,
+        userLabel: selectedUser?.name || selectedUser?.email || selectedUserId,
+      });
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to generate PDF.');
+    } finally {
+      setDownloadingPdf(false);
     }
   }
 
@@ -222,6 +246,23 @@ export default function Home() {
                     <Button onClick={generateReport} disabled={loadingReport || loadingUsers}>
                       {loadingReport ? 'Generating…' : 'Generate 30-day report'}
                     </Button>
+
+                    <Button
+                      variant="ghost"
+                      onClick={handleDownloadPdf}
+                      disabled={!days || downloadingPdf || loadingReport}
+                      title={!days ? 'Generate a report first' : 'Download as PDF'}
+                    >
+                      {downloadingPdf ? (
+                        'Generating PDF…'
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <span aria-hidden>⤓</span>
+                          <span>Download PDF</span>
+                        </span>
+                      )}
+                    </Button>
+
                     {loadingReport ? <Spinner label={status || 'Fetching'} /> : null}
                   </div>
                 </div>
@@ -232,7 +273,9 @@ export default function Home() {
             </Card>
 
             {days ? (
-              <ReportBlock userLabel={selectedUser?.name || selectedUser?.email || selectedUserId} days={days} />
+              <div ref={reportRef} className="space-y-4">
+                <ReportBlock userLabel={selectedUser?.name || selectedUser?.email || selectedUserId} days={days} />
+              </div>
             ) : null}
           </div>
         )}
