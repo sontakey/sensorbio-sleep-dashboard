@@ -41,7 +41,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="inline-flex items-center justify-center h-9 w-9 rounded-lg border border-[#1e293b] bg-transparent text-slate-200 hover:bg-white/5 transition"
+      className="theme-toggle-btn inline-flex items-center justify-center h-9 w-9 rounded-lg border border-[#1e293b] bg-transparent text-slate-200 hover:bg-white/5 transition"
       aria-label={isLight ? 'Switch to dark mode' : 'Switch to light mode'}
       title={isLight ? 'Dark mode' : 'Light mode'}
     >
