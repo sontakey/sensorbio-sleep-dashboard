@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Card, CardBody, Button, Input, Label, SectionTitle, Select, Spinner } from '@/components/ui';
+import { Card, CardBody, Button, Input, Label, SectionTitle, Spinner } from '@/components/ui';
 import { fetchOrgUsers, fetchSleepForDate, type OrgUser, type SleepDay } from '@/lib/sensorbio';
 import { lastNDates, normalizeSleepDay, computeSummary, generateInsights } from '@/lib/report';
 import { fmt1, minsToHm, scoreTextClass } from '@/lib/format';
@@ -62,7 +62,8 @@ export default function Home() {
       sessionStorage.setItem(KEY_STORAGE, trimmed);
       setConnectedKey(trimmed);
       setUsers(list);
-      setSelectedUserId(list[0]?.id ?? '');
+      setSelectedUserId('');
+      setDays(null);
       setStatus('');
     } catch (e: any) {
       setError(e?.message ?? 'Failed to connect.');
@@ -96,7 +97,8 @@ export default function Home() {
       const list = await fetchOrgUsers(key, abortRef.current.signal);
       if (!list.length) throw new Error('No users returned for this organization.');
       setUsers(list);
-      setSelectedUserId((prev) => prev || list[0]?.id || '');
+      setSelectedUserId((prev) => prev || '');
+      setDays(null);
       setStatus('');
     } catch (e: any) {
       setError(e?.message ?? 'Failed to load users.');
@@ -113,12 +115,15 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectedKey]);
 
-  async function generateReport() {
+  async function generateReport(userId?: string) {
     if (!connectedKey) return;
-    if (!selectedUserId) {
+    const uid = userId || selectedUserId;
+    if (!uid) {
       setError('Please pick a user.');
       return;
     }
+
+    if (userId) setSelectedUserId(userId);
 
     setLoadingReport(true);
     setError('');
@@ -135,7 +140,7 @@ export default function Home() {
       for (let i = 0; i < dates.length; i++) {
         const date = dates[i];
         setStatus(`Fetching day ${i + 1} of 30...`);
-        const items = await fetchSleepForDate(connectedKey, selectedUserId, date, abortRef.current.signal);
+        const items = await fetchSleepForDate(connectedKey, uid, date, abortRef.current.signal);
         out.push(normalizeSleepDay(date, items));
       }
 
@@ -220,63 +225,92 @@ export default function Home() {
           </Card>
         ) : (
           <div className="space-y-4">
-            <Card>
-              <CardBody>
-                <div className="flex flex-col md:flex-row md:items-end gap-4 justify-between">
-                  <div className="flex-1">
-                    <SectionTitle>User</SectionTitle>
-                    {loadingUsers ? (
-                      <Spinner label="Loading users" />
+            {selectedUserId && days ? (
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      abortRef.current?.abort();
+                      setSelectedUserId('');
+                      setDays(null);
+                      setStatus('');
+                      setError('');
+                    }}
+                  >
+                    Back to Users
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    onClick={handleDownloadPdf}
+                    disabled={!days || downloadingPdf || loadingReport}
+                    title={!days ? 'Generate a report first' : 'Download as PDF'}
+                  >
+                    {downloadingPdf ? (
+                      'Generating PDF…'
                     ) : (
-                      <div className="space-y-2">
-                        <Label>Select a user</Label>
-                        <Select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)}>
-                          {users.map((u) => (
-                            <option key={u.id} value={u.id}>
-                              {(u.name || u.email || u.id).toString()}
-                              {u.email && u.name ? ` (${u.email})` : ''}
-                            </option>
-                          ))}
-                        </Select>
-                      </div>
+                      <span className="inline-flex items-center gap-2">
+                        <span aria-hidden>⤓</span>
+                        <span>Download PDF</span>
+                      </span>
                     )}
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <Button onClick={generateReport} disabled={loadingReport || loadingUsers}>
-                      {loadingReport ? 'Generating…' : 'Generate 30-day report'}
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      onClick={handleDownloadPdf}
-                      disabled={!days || downloadingPdf || loadingReport}
-                      title={!days ? 'Generate a report first' : 'Download as PDF'}
-                    >
-                      {downloadingPdf ? (
-                        'Generating PDF…'
-                      ) : (
-                        <span className="inline-flex items-center gap-2">
-                          <span aria-hidden>⤓</span>
-                          <span>Download PDF</span>
-                        </span>
-                      )}
-                    </Button>
-
-                    {loadingReport ? <Spinner label={status || 'Fetching'} /> : null}
-                  </div>
+                  </Button>
                 </div>
 
-                {error ? <div className="mt-4 text-sm text-red-300">{error}</div> : null}
+                {error ? <div className="mt-2 text-sm text-red-300">{error}</div> : null}
                 {!loadingReport && status ? <div className="mt-2 text-sm text-slate-400">{status}</div> : null}
-              </CardBody>
-            </Card>
 
-            {days ? (
-              <div ref={reportRef} className="space-y-4">
-                <ReportBlock userLabel={selectedUser?.name || selectedUser?.email || selectedUserId} days={days} />
-              </div>
-            ) : null}
+                <div ref={reportRef} className="space-y-4">
+                  <ReportBlock userLabel={selectedUser?.name || selectedUser?.email || selectedUserId} days={days} />
+                </div>
+              </>
+            ) : (
+              <Card>
+                <CardBody>
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <SectionTitle>Users</SectionTitle>
+                      <div className="text-sm text-slate-400">Pick a user to generate their 30-day report.</div>
+                    </div>
+                    {loadingUsers ? <Spinner label="Loading users" /> : null}
+                  </div>
+
+                  {error ? <div className="mt-4 text-sm text-red-300">{error}</div> : null}
+                  {!loadingReport && status ? <div className="mt-2 text-sm text-slate-400">{status}</div> : null}
+
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {users.map((u) => {
+                      const name = (u.name || u.email || u.id).toString();
+                      const email = u.email?.toString() || '';
+                      const seed = encodeURIComponent(name);
+                      const avatar = `https://api.dicebear.com/7.x/initials/svg?seed=${seed}`;
+                      return (
+                        <button
+                          key={u.id}
+                          onClick={() => void generateReport(u.id)}
+                          className="text-left bg-[#111827] border border-[#1e293b] rounded-xl p-4 cursor-pointer transition focus:outline-none focus:ring-2 focus:ring-blue-500/40 hover:border-blue-500/60 hover:shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_10px_30px_-15px_rgba(59,130,246,0.35)]"
+                        >
+                          <div className="flex flex-col items-center">
+                            <div className="h-16 w-16 rounded-full bg-[#0f172a] border border-[#1e293b] overflow-hidden flex items-center justify-center">
+                              <img src={avatar} alt="" className="h-16 w-16" />
+                            </div>
+                            <div className="mt-3 text-slate-100 font-bold text-center leading-tight">{name}</div>
+                            <div className="mt-1 text-xs text-slate-500 text-center break-all">{email}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {loadingReport ? (
+                    <div className="mt-4">
+                      <Spinner label={status || 'Fetching'} />
+                    </div>
+                  ) : null}
+                </CardBody>
+              </Card>
+            )}
           </div>
         )}
 
